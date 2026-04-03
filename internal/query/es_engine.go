@@ -27,8 +27,8 @@ func NewESEngine(url string) *ESEngine {
 
 func (e *ESEngine) Name() string { return "elasticsearch" }
 
-func (e *ESEngine) Execute(ctx context.Context, query string) (*Result, error) {
-	body := e.buildQueryBody(query)
+func (e *ESEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+	body := e.buildPagedQueryBody(query, page)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url+"/_search", bytes.NewReader(body))
 	if err != nil {
@@ -63,7 +63,14 @@ func (e *ESEngine) Execute(ctx context.Context, query string) (*Result, error) {
 		}
 	}
 
-	return &Result{Columns: cols, Rows: rows, Engine: "elasticsearch"}, nil
+	result := &Result{Columns: cols, Rows: rows, Engine: "elasticsearch"}
+	if page != nil && page.Limit > 0 && len(rows) == page.Limit {
+		result.NextPage = &NextPage{
+			Offset: page.Offset + page.Limit,
+			Limit:  page.Limit,
+		}
+	}
+	return result, nil
 }
 
 func (e *ESEngine) ExecuteStream(ctx context.Context, query string, pageSize int, out chan<- StreamResult) error {
@@ -174,6 +181,32 @@ func (e *ESEngine) buildQueryBody(query string) []byte {
 		"query": map[string]any{
 			"query_string": map[string]any{"query": query},
 		},
+	}
+	body, _ := json.Marshal(q)
+	return body
+}
+
+func (e *ESEngine) buildPagedQueryBody(query string, page *PageOptions) []byte {
+	var q map[string]any
+	if strings.HasPrefix(strings.TrimSpace(query), "{") {
+		json.Unmarshal([]byte(query), &q)
+		if q == nil {
+			q = make(map[string]any)
+		}
+	} else {
+		q = map[string]any{
+			"query": map[string]any{
+				"query_string": map[string]any{"query": query},
+			},
+		}
+	}
+	if page != nil {
+		if page.Limit > 0 {
+			q["size"] = page.Limit
+		}
+		if page.Offset > 0 {
+			q["from"] = page.Offset
+		}
 	}
 	body, _ := json.Marshal(q)
 	return body

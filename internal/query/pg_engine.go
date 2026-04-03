@@ -18,8 +18,18 @@ func NewPGEngine(pool *pgxpool.Pool) *PGEngine {
 
 func (e *PGEngine) Name() string { return "postgres" }
 
-func (e *PGEngine) Execute(ctx context.Context, query string) (*Result, error) {
-	rows, err := e.pool.Query(ctx, query)
+func (e *PGEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+	q := query
+	if page != nil {
+		if page.Limit > 0 {
+			q += fmt.Sprintf(" LIMIT %d", page.Limit)
+		}
+		if page.Offset > 0 {
+			q += fmt.Sprintf(" OFFSET %d", page.Offset)
+		}
+	}
+
+	rows, err := e.pool.Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("postgres query: %w", err)
 	}
@@ -46,7 +56,15 @@ func (e *PGEngine) Execute(ctx context.Context, query string) (*Result, error) {
 		return nil, err
 	}
 
-	return &Result{Columns: cols, Rows: resultRows, Engine: "postgres"}, nil
+	result := &Result{Columns: cols, Rows: resultRows, Engine: "postgres"}
+	if page != nil && page.Limit > 0 && len(resultRows) == page.Limit {
+		result.NextPage = &NextPage{
+			Offset: page.Offset + page.Limit,
+			Limit:  page.Limit,
+		}
+	}
+
+	return result, nil
 }
 
 func (e *PGEngine) ExecuteStream(ctx context.Context, query string, pageSize int, out chan<- StreamResult) error {

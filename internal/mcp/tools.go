@@ -118,7 +118,7 @@ func (s *Server) handleQuery(ctx context.Context, req mcp.CallToolRequest) (*mcp
 		return mcp.NewToolResultError(fmt.Sprintf("unknown engine: %s", engineName)), nil
 	}
 
-	result, execErr := engine.Execute(ctx, q)
+	result, execErr := engine.Execute(ctx, q, nil)
 	if execErr != nil {
 		return mcp.NewToolResultError(fmt.Sprintf("query error: %s", execErr)), nil
 	}

@@ -27,8 +27,17 @@ func NewCHEngine(url string) *CHEngine {
 
 func (e *CHEngine) Name() string { return "clickhouse" }
 
-func (e *CHEngine) Execute(ctx context.Context, query string) (*Result, error) {
-	fullQuery := query + " FORMAT JSON"
+func (e *CHEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+	q := query
+	if page != nil {
+		if page.Limit > 0 {
+			q += fmt.Sprintf(" LIMIT %d", page.Limit)
+		}
+		if page.Offset > 0 {
+			q += fmt.Sprintf(" OFFSET %d", page.Offset)
+		}
+	}
+	fullQuery := q + " FORMAT JSON"
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url+"/", strings.NewReader(fullQuery))
 	if err != nil {
 		return nil, err
@@ -61,7 +70,14 @@ func (e *CHEngine) Execute(ctx context.Context, query string) (*Result, error) {
 		cols[i] = m.Name
 	}
 
-	return &Result{Columns: cols, Rows: chResp.Data, Engine: "clickhouse"}, nil
+	result := &Result{Columns: cols, Rows: chResp.Data, Engine: "clickhouse"}
+	if page != nil && page.Limit > 0 && len(chResp.Data) == page.Limit {
+		result.NextPage = &NextPage{
+			Offset: page.Offset + page.Limit,
+			Limit:  page.Limit,
+		}
+	}
+	return result, nil
 }
 
 func (e *CHEngine) ExecuteStream(ctx context.Context, query string, pageSize int, out chan<- StreamResult) error {

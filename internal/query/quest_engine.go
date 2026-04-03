@@ -36,8 +36,17 @@ func NewQuestEngine(questURL string, registry *schema.Registry) *QuestEngine {
 
 func (e *QuestEngine) Name() string { return "questdb" }
 
-func (e *QuestEngine) Execute(ctx context.Context, query string) (*Result, error) {
-	reqURL := fmt.Sprintf("%s/exec?query=%s", e.url, url.QueryEscape(query))
+func (e *QuestEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+	q := query
+	if page != nil {
+		if page.Limit > 0 {
+			q += fmt.Sprintf(" LIMIT %d", page.Limit)
+		}
+		if page.Offset > 0 {
+			q += fmt.Sprintf(" OFFSET %d", page.Offset)
+		}
+	}
+	reqURL := fmt.Sprintf("%s/exec?query=%s", e.url, url.QueryEscape(q))
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	if err != nil {
 		return nil, err
@@ -81,7 +90,14 @@ func (e *QuestEngine) Execute(ctx context.Context, query string) (*Result, error
 		rows = append(rows, row)
 	}
 
-	return &Result{Columns: cols, Rows: rows, Engine: "questdb"}, nil
+	result := &Result{Columns: cols, Rows: rows, Engine: "questdb"}
+	if page != nil && page.Limit > 0 && len(rows) == page.Limit {
+		result.NextPage = &NextPage{
+			Offset: page.Offset + page.Limit,
+			Limit:  page.Limit,
+		}
+	}
+	return result, nil
 }
 
 // ExecuteStream streams results using QuestDB's /exp CSV endpoint.

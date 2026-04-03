@@ -20,13 +20,25 @@ func NewMongoEngine(db *mongo.Database) *MongoEngine {
 
 func (e *MongoEngine) Name() string { return "mongodb" }
 
-func (e *MongoEngine) Execute(ctx context.Context, query string) (*Result, error) {
+func (e *MongoEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
 	req, err := parseMongoQuery(query)
 	if err != nil {
 		return nil, err
 	}
 
-	cursor, err := e.db.Collection(req.Collection).Find(ctx, req.Filter)
+	opts := options.Find()
+	if page != nil {
+		if page.Limit > 0 {
+			opts.SetLimit(int64(page.Limit))
+		}
+		if page.Offset > 0 {
+			opts.SetSkip(int64(page.Offset))
+		}
+	} else if req.Limit > 0 {
+		opts.SetLimit(req.Limit)
+	}
+
+	cursor, err := e.db.Collection(req.Collection).Find(ctx, req.Filter, opts)
 	if err != nil {
 		return nil, fmt.Errorf("mongodb find: %w", err)
 	}
@@ -44,7 +56,22 @@ func (e *MongoEngine) Execute(ctx context.Context, query string) (*Result, error
 		rows = append(rows, row)
 	}
 
-	return &Result{Columns: cols, Rows: rows, Engine: "mongodb"}, nil
+	result := &Result{Columns: cols, Rows: rows, Engine: "mongodb"}
+	limit := 0
+	if page != nil && page.Limit > 0 {
+		limit = page.Limit
+	}
+	if limit > 0 && len(rows) == limit {
+		offset := 0
+		if page != nil {
+			offset = page.Offset
+		}
+		result.NextPage = &NextPage{
+			Offset: offset + limit,
+			Limit:  limit,
+		}
+	}
+	return result, nil
 }
 
 func (e *MongoEngine) ExecuteStream(ctx context.Context, query string, pageSize int, out chan<- StreamResult) error {

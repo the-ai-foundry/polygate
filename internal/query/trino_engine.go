@@ -26,12 +26,28 @@ func NewTrinoEngine(trinoURL string) *TrinoEngine {
 
 func (e *TrinoEngine) Name() string { return "trino" }
 
-func (e *TrinoEngine) Execute(ctx context.Context, query string) (*Result, error) {
-	cols, rows, err := e.fetchAllPages(ctx, query)
+func (e *TrinoEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+	q := query
+	if page != nil {
+		if page.Limit > 0 {
+			q += fmt.Sprintf(" LIMIT %d", page.Limit)
+		}
+		if page.Offset > 0 {
+			q += fmt.Sprintf(" OFFSET %d", page.Offset)
+		}
+	}
+	cols, rows, err := e.fetchAllPages(ctx, q)
 	if err != nil {
 		return nil, err
 	}
-	return &Result{Columns: cols, Rows: rows, Engine: "trino"}, nil
+	result := &Result{Columns: cols, Rows: rows, Engine: "trino"}
+	if page != nil && page.Limit > 0 && len(rows) == page.Limit {
+		result.NextPage = &NextPage{
+			Offset: page.Offset + page.Limit,
+			Limit:  page.Limit,
+		}
+	}
+	return result, nil
 }
 
 func (e *TrinoEngine) ExecuteStream(ctx context.Context, query string, pageSize int, out chan<- StreamResult) error {
