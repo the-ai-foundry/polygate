@@ -1,4 +1,16 @@
 services:
+  polygate:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./config.docker.mongo-es.yaml:/etc/polygate/config.yaml:ro
+    depends_on:
+      - mongodb
+      - elasticsearch
+    restart: unless-stopped
+
   mongodb:
     image: mongo:8
     ports:

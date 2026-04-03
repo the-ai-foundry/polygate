@@ -1,0 +1,23 @@
+server:
+  bind: "0.0.0.0:8080"
+
+metrics:
+  enabled: true
+  bind: "0.0.0.0:9090"
+
+batcher:
+  max_size: 5000
+  flush_period: 1s
+  buffer_size: 100000
+
+sinks:
+  postgres:
+    enabled: true
+    dsn: "postgres://polygate:polygate@postgres:5432/polygate"
+    bulk_size: 5000
+    max_conns: 10
+
+  elasticsearch:
+    enabled: true
+    dsn: "http://elasticsearch:9200"
+    bulk_size: 5000

@@ -1,0 +1,9 @@
+.git
+*.md
+docs/
+trino/
+config.example.yaml
+config.pg-mongo.yaml
+config.mongo-es.yaml
+config.pg-es.yaml
+test.sh

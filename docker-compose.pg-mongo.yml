@@ -1,4 +1,16 @@
 services:
+  polygate:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./config.docker.pg-mongo.yaml:/etc/polygate/config.yaml:ro
+    depends_on:
+      - postgres
+      - mongodb
+    restart: unless-stopped
+
   postgres:
     image: postgres:17
     ports:

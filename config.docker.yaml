@@ -1,0 +1,62 @@
+server:
+  bind: "0.0.0.0:8080"
+
+metrics:
+  enabled: true
+  bind: "0.0.0.0:9090"
+
+batcher:
+  max_size: 5000
+  flush_period: 1s
+  buffer_size: 100000
+
+sinks:
+  postgres:
+    enabled: true
+    dsn: "postgres://polygate:polygate@postgres:5432/polygate"
+    bulk_size: 5000
+    max_conns: 10
+    max_retries: 3
+    retry_base_ms: 100
+    timeout_secs: 30
+
+  clickhouse:
+    enabled: true
+    dsn: "http://clickhouse:8123"
+    bulk_size: 10000
+    max_retries: 3
+    retry_base_ms: 100
+    timeout_secs: 30
+
+  elasticsearch:
+    enabled: true
+    dsn: "http://elasticsearch:9200"
+    bulk_size: 5000
+    max_retries: 3
+    retry_base_ms: 100
+    timeout_secs: 30
+
+  mongodb:
+    enabled: true
+    dsn: "mongodb://mongodb:27017/polygate"
+    bulk_size: 5000
+    max_retries: 3
+    retry_base_ms: 100
+
+  questdb:
+    enabled: true
+    dsn: "questdb:9009"
+    rest_url: "http://questdb:9000"
+    bulk_size: 10000
+    max_retries: 3
+    retry_base_ms: 100
+    timeout_secs: 30
+
+mcp:
+  enabled: false
+  transport: "stdio"
+  http_port: 8090
+
+trino:
+  enabled: true
+  url: "http://trino:8080"
