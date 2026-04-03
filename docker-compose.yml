@@ -1,0 +1,52 @@
+services:
+  postgres:
+    image: postgres:16
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: polygate
+      POSTGRES_USER: polygate
+      POSTGRES_PASSWORD: polygate
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ch_data:/var/lib/clickhouse
+
+  elasticsearch:
+    image: elasticsearch:8.13.0
+    ports:
+      - "9200:9200"
+    environment:
+      discovery.type: single-node
+      xpack.security.enabled: "false"
+      ES_JAVA_OPTS: "-Xms512m -Xmx512m"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+
+  mongodb:
+    image: mongo:7
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_data:/data/db
+
+  questdb:
+    image: questdb/questdb:8.2.3
+    ports:
+      - "9009:9009"   # ILP TCP
+      - "9003:9000"   # REST API (remapped to avoid conflict with CH)
+    volumes:
+      - quest_data:/var/lib/questdb
+
+volumes:
+  pg_data:
+  ch_data:
+  es_data:
+  mongo_data:
+  quest_data:
