@@ -19,7 +19,7 @@ run: build
 	./bin/polygate -config config.example.yaml
 
 docker-up:
-	docker compose up -d
+	docker compose up -d --build
 
 docker-down:
 	docker compose down
@@ -28,14 +28,11 @@ docker-clean:
 	docker compose down -v
 
 # Profiles — lightweight deployments
-pg-mongo: build
-	docker compose -f docker-compose.pg-mongo.yml up -d
-	./bin/polygate -config config.pg-mongo.yaml
+pg-mongo:
+	docker compose -f docker-compose.pg-mongo.yml up -d --build
 
-mongo-es: build
-	docker compose -f docker-compose.mongo-es.yml up -d
-	./bin/polygate -config config.mongo-es.yaml
+mongo-es:
+	docker compose -f docker-compose.mongo-es.yml up -d --build
 
-pg-es: build
-	docker compose -f docker-compose.pg-es.yml up -d
-	./bin/polygate -config config.pg-es.yaml
+pg-es:
+	docker compose -f docker-compose.pg-es.yml up -d --build
