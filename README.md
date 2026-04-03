@@ -1,21 +1,22 @@
 # Polygate
 
-A multi-database data gateway that ingests data via REST API and fans out bulk writes to multiple databases simultaneously. Query any backend through a unified query interface.
+A multi-database data gateway that ingests data via REST API and fans out bulk writes to multiple databases simultaneously. Query any backend through a unified query interface with optional SSE streaming.
 
 ## Supported Databases
 
-| Database | Write Method | Query Method |
-|---|---|---|
-| PostgreSQL | `COPY` protocol (pgx) | SQL |
-| ClickHouse | `INSERT FORMAT JSONEachRow` (HTTP) | SQL |
-| Elasticsearch | `_bulk` API (NDJSON) | Query DSL / query_string |
-| MongoDB | `insertMany(ordered: false)` | JSON filter |
-| QuestDB | ILP over TCP (InfluxDB Line Protocol) | SQL via REST |
+| Database | Write Method | Query Method | SSE Streaming |
+|---|---|---|---|
+| PostgreSQL | `COPY` protocol (pgx) | SQL | Server-side cursor (`DECLARE/FETCH`) |
+| ClickHouse | `INSERT FORMAT JSONEachRow` (HTTP) | SQL | Chunked `JSONEachRow` streaming |
+| Elasticsearch | `_bulk` API (NDJSON) | Query DSL / query_string | Scroll API (`scroll_id`) |
+| MongoDB | `insertMany(ordered: false)` | JSON filter | Cursor with `BatchSize` |
+| QuestDB | ILP over TCP (InfluxDB Line Protocol) | SQL via REST | `/exp` CSV streaming |
+| Trino | — (read-only federation) | SQL | `nextUri` page following |
 
 ## Quick Start
 
 ```bash
-# Start all 5 databases
+# Start all databases (PG, CH, ES, Mongo, QuestDB, Trino)
 docker compose up -d
 
 # Build and run
@@ -54,9 +55,10 @@ Polygate starts on `:8080` (API) and `:9090` (Prometheus metrics).
                     │  Router    │  ← routes to the specified engine
                     └─────┬─────┘
                           │
-                    ┌─────▼─────┐
-                    │  Engine    │  ← executes query against the target DB
-                    └───────────┘
+         ┌────────┬───────┼────────┬──────────┬──────┐
+         ▼        ▼       ▼        ▼          ▼      ▼
+     PostgreSQL  CH    Elastic   Mongo     QuestDB  Trino
+                                                  (federation)
 ```
 
 ## API Reference
@@ -85,7 +87,11 @@ curl -X POST localhost:8080/schema \
     "indexes": [
       {"columns": ["name"]},
       {"columns": ["ts"]}
-    ]
+    ],
+    "partition_by": "ts",
+    "overrides": {
+      "clickhouse": {"name": "LowCardinality(String)"}
+    }
   }'
 ```
 
@@ -114,22 +120,6 @@ curl localhost:8080/schema/events
 
 ```bash
 curl localhost:8080/schema/events/proto -o events.proto
-```
-
-Returns:
-```protobuf
-syntax = "proto3";
-
-message Events {
-  double amount = 1;
-  int64 id = 2;
-  string name = 3;
-  int64 ts = 4;
-}
-
-message EventsBatch {
-  repeated Events records = 1;
-}
 ```
 
 ### Data Ingestion
@@ -170,20 +160,17 @@ Error responses:
 
 #### `GET /query?engine={name}&q={query}` — Execute a query
 
-**PostgreSQL / ClickHouse / QuestDB** (SQL):
+**PostgreSQL / ClickHouse / QuestDB / Trino** (SQL):
 ```bash
 curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events LIMIT 10"
 curl "localhost:8080/query?engine=clickhouse&q=SELECT count() FROM events"
 curl "localhost:8080/query?engine=questdb&q=SELECT * FROM events"
+curl "localhost:8080/query?engine=trino&q=SELECT * FROM postgres.polygate.events"
 ```
 
 **Elasticsearch** (query_string or raw JSON DSL):
 ```bash
-# Simple query string
 curl "localhost:8080/query?engine=elasticsearch&q=name:click"
-
-# Raw JSON DSL
-curl "localhost:8080/query?engine=elasticsearch&q={\"query\":{\"match\":{\"name\":\"click\"}}}"
 ```
 
 **MongoDB** (JSON filter):
@@ -206,6 +193,60 @@ Response:
 }
 ```
 
+#### SSE Streaming — `GET /query?...&stream=true`
+
+Stream large result sets as Server-Sent Events. Each event contains a page of rows.
+
+```bash
+curl -N "localhost:8080/query?engine=postgres&q=SELECT * FROM events&stream=true&page_size=1000"
+```
+
+Parameters:
+- `stream=true` — enable SSE streaming
+- `page_size=1000` — rows per SSE event (default 1000, max 10000)
+- `table=events` — required for QuestDB streaming (CSV schema lookup)
+
+SSE event format:
+```
+data: {"columns":["id","name"],"rows":[...],"page":1,"done":false,"engine":"postgres"}
+
+data: {"columns":["id","name"],"rows":[...],"page":2,"done":true,"engine":"postgres"}
+
+event: done
+data: {}
+```
+
+Streaming mechanism per engine:
+
+| Engine | How it streams |
+|---|---|
+| PostgreSQL | Server-side cursor (`DECLARE cursor FOR ... ; FETCH N`) |
+| ClickHouse | `FORMAT JSONEachRow` — one JSON object per line |
+| Elasticsearch | Scroll API with `scroll_id` pagination |
+| MongoDB | Cursor with `BatchSize` iteration |
+| QuestDB | `/exp` CSV endpoint + schema-based type coercion |
+| Trino | `nextUri` page following (native pagination) |
+
+#### Trino Cross-Database Queries
+
+Trino enables federated SQL across all databases:
+
+```bash
+# Join PostgreSQL and ClickHouse data
+curl "localhost:8080/query?engine=trino&q=SELECT o.customer, m.total FROM postgres.polygate.orders o JOIN clickhouse.default.metrics m ON o.id = m.order_id"
+
+# Query Elasticsearch via SQL
+curl "localhost:8080/query?engine=trino&q=SELECT * FROM elasticsearch.default.events"
+
+# Query MongoDB via SQL
+curl "localhost:8080/query?engine=trino&q=SELECT * FROM mongodb.polygate.users"
+
+# Query QuestDB via SQL (through PG wire protocol)
+curl "localhost:8080/query?engine=trino&q=SELECT * FROM questdb.qdb.sensor_readings"
+```
+
+Naming convention: `{catalog}.{schema}.{table}`
+
 ### Health Checks
 
 ```bash
@@ -214,20 +255,6 @@ curl localhost:8080/healthz
 
 # Readiness — pings all enabled sinks
 curl localhost:8080/readyz
-```
-
-Readiness response:
-```json
-{
-  "ok": true,
-  "sinks": {
-    "postgres": "ok",
-    "clickhouse": "ok",
-    "elasticsearch": "ok",
-    "mongodb": "ok",
-    "questdb": "ok"
-  }
-}
 ```
 
 ### Prometheus Metrics
@@ -252,25 +279,25 @@ See [`config.example.yaml`](config.example.yaml) for a complete example.
 
 ```yaml
 server:
-  bind: "0.0.0.0:8080"          # API listen address
+  bind: "0.0.0.0:8080"
 
 metrics:
   enabled: true
-  bind: "0.0.0.0:9090"          # Prometheus metrics address
+  bind: "0.0.0.0:9090"
 
 batcher:
-  max_size: 5000                 # Records per batch before flush
-  flush_period: 1s               # Time-based flush interval
-  buffer_size: 100000            # Channel buffer capacity
+  max_size: 5000
+  flush_period: 1s
+  buffer_size: 100000
 
 sinks:
   postgres:
     enabled: true
     dsn: "postgres://user:pass@localhost:5432/polygate"
-    bulk_size: 5000              # Rows per COPY batch
-    max_conns: 10                # Connection pool size
-    max_retries: 3               # Retry attempts on failure
-    retry_base_ms: 100           # Base backoff (doubles each retry)
+    bulk_size: 5000
+    max_conns: 10
+    max_retries: 3
+    retry_base_ms: 100
     timeout_secs: 30
 
   clickhouse:
@@ -290,71 +317,98 @@ sinks:
 
   questdb:
     enabled: true
-    dsn: "localhost:9009"         # ILP TCP endpoint
+    dsn: "localhost:9009"              # ILP TCP (ingestion)
+    rest_url: "http://localhost:9003"  # REST API (DDL + queries)
     bulk_size: 10000
+
+# Trino federated query engine (optional)
+trino:
+  enabled: true
+  url: "http://localhost:8085"
+
+# MCP server for LLM integrations (optional)
+mcp:
+  enabled: false
+  transport: "stdio"      # "stdio" (Claude Code, Cursor) or "http" (remote)
+  http_port: 8090
 ```
 
-### Environment Variable Password Injection
+## MCP Server (Model Context Protocol)
+
+Polygate includes an MCP server that exposes schemas and tools for LLM integrations. This allows Claude, ChatGPT, Cursor, and other AI tools to discover and interact with your databases through natural language.
+
+### Resources (read-only context)
+
+| Resource URI | Description |
+|---|---|
+| `polygate://api` | Full API documentation |
+| `polygate://schemas` | All registered table schemas |
+| `polygate://schemas/{table}` | Specific table schema |
+| `polygate://schemas/{table}/proto` | Auto-generated .proto file |
+| `polygate://sinks` | Enabled sinks with health status |
+| `polygate://types` | Portable type system reference |
+
+### Tools (executable actions)
+
+| Tool | Description |
+|---|---|
+| `register_schema` | Register a new table schema and create tables |
+| `ingest` | Ingest JSON records into a table |
+| `query` | Execute a query against any engine |
+| `health_check` | Check all sink connectivity |
+
+### Setup with Claude Code
+
+```json
+{
+  "mcpServers": {
+    "polygate": {
+      "command": "./bin/polygate",
+      "args": ["-config", "config.yaml"]
+    }
+  }
+}
+```
+
+Enable in config:
+```yaml
+mcp:
+  enabled: true
+  transport: "stdio"
+```
+
+### Setup for Remote Access (HTTP)
 
 ```yaml
-sinks:
-  postgres:
-    dsn: "postgres://user:@localhost:5432/db"   # empty password placeholder
-    password_env: "PG_PASSWORD"                  # injected from $PG_PASSWORD
+mcp:
+  enabled: true
+  transport: "http"
+  http_port: 8090
 ```
-
-### Sink-Specific Defaults
-
-Sinks that are not listed or have `enabled: false` are skipped. Each sink inherits sensible defaults if values are omitted:
-
-| Setting | Default |
-|---|---|
-| `bulk_size` | 5000 |
-| `max_retries` | 3 |
-| `retry_base_ms` | 100 |
-| `max_conns` | 10 |
-| `timeout_secs` | 30 |
 
 ## Protobuf Ingestion
 
-Polygate auto-generates protobuf schemas from your table definitions. This enables binary ingestion that is 5-10x faster to parse than JSON.
-
-### Workflow
+Polygate auto-generates protobuf schemas from your table definitions for binary ingestion (5-10x faster than JSON).
 
 ```bash
-# 1. Register schema (normal JSON)
+# 1. Register schema
 curl -X POST localhost:8080/schema -d '{
   "table": "metrics",
-  "columns": {"host": "string", "cpu": "float64", "mem": "float64", "ts": "timestamp"},
+  "columns": {"host": "string", "cpu": "float64", "ts": "timestamp"},
   "sinks": ["questdb", "clickhouse"]
 }'
 
-# 2. Download auto-generated .proto file
+# 2. Download .proto file
 curl localhost:8080/schema/metrics/proto -o metrics.proto
 
 # 3. Compile for your language
-protoc --go_out=. metrics.proto       # Go
-protoc --python_out=. metrics.proto   # Python
-protoc --java_out=. metrics.proto     # Java
+protoc --go_out=. metrics.proto
 
 # 4. Send binary data
 curl -X POST "localhost:8080/ingest?table=metrics" \
   -H "Content-Type: application/x-protobuf" \
   --data-binary @batch.bin
 ```
-
-### Type Mapping
-
-| Polygate type | Proto type | Notes |
-|---|---|---|
-| `string`, `text`, `json` | `string` | JSON stored as string |
-| `int32` | `int32` | |
-| `int64` | `int64` | |
-| `timestamp` | `int64` | Unix nanoseconds |
-| `float32` | `float` | |
-| `float64` | `double` | |
-| `bool` | `bool` | |
-| `bytes` | `bytes` | |
 
 ## Building
 
@@ -388,25 +442,35 @@ polygate/
       clickhouse.go                  # ClickHouse HTTP bulk writer
       elasticsearch.go               # Elasticsearch _bulk writer
       mongodb.go                     # MongoDB insertMany writer
-      questdb.go                     # QuestDB ILP TCP writer
+      questdb.go                     # QuestDB ILP TCP writer + REST DDL
     batcher/batcher.go               # Per-table batching (size + time flush)
     query/
       engine.go                      # QueryEngine interface
+      stream.go                      # StreamEngine interface (SSE)
       router.go                      # Engine routing by name
-      pg_engine.go                   # PostgreSQL query executor
-      ch_engine.go                   # ClickHouse query executor
-      es_engine.go                   # Elasticsearch query executor
-      mongo_engine.go                # MongoDB query executor
-      quest_engine.go                # QuestDB query executor
+      pg_engine.go                   # PostgreSQL (cursor streaming)
+      ch_engine.go                   # ClickHouse (JSONEachRow streaming)
+      es_engine.go                   # Elasticsearch (scroll streaming)
+      mongo_engine.go                # MongoDB (cursor streaming)
+      quest_engine.go                # QuestDB (CSV streaming)
+      trino_engine.go                # Trino (page streaming)
+    mcp/
+      mcp.go                         # MCP server setup (stdio + HTTP)
+      resources.go                   # MCP resources (schemas, API docs, types)
+      tools.go                       # MCP tools (register, ingest, query)
     server/
       server.go                      # HTTP server + routes
       ingest.go                      # POST /ingest (JSON + protobuf)
       schema.go                      # POST/GET /schema + proto download
-      query.go                       # GET /query
+      query.go                       # GET /query (+ SSE streaming)
       health.go                      # /healthz + /readyz
       middleware.go                  # Request logging + panic recovery
     metrics/metrics.go               # Prometheus metric definitions
-  docker-compose.yml                 # All 5 databases for local dev
+  trino/                             # Trino config + catalog connectors
+  docker-compose.yml                 # All databases + Trino for local dev
   config.example.yaml                # Ready-to-use configuration
   Makefile                           # Build targets
+  docs/
+    schema.md                        # Schema reference + examples
+    playbook.md                      # Step-by-step testing guide
 ```

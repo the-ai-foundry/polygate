@@ -13,7 +13,7 @@ const apiDocumentation = `# Polygate API Reference
 ## Schema Management
 
 ### POST /schema — Register a table schema
-Creates the table in all target sinks.
+Creates the table/index in all target sinks.
 
 Request body:
 {
@@ -24,7 +24,7 @@ Request body:
   "indexes": [{"columns": ["name"]}],
   "partition_by": "ts",
   "designated_timestamp": "ts",
-  "overrides": {"questdb": {"name": "symbol"}}
+  "overrides": {"questdb": {"name": "symbol"}, "clickhouse": {"name": "LowCardinality(String)"}}
 }
 
 Response (201): {"ok": true, "table": "events", "sinks": ["postgres", "clickhouse"]}
@@ -66,7 +66,33 @@ Elasticsearch (query_string or JSON DSL):
 MongoDB (JSON filter):
   /query?engine=mongodb&q={"collection":"events","filter":{"name":"click"}}
 
+Trino cross-database:
+  /query?engine=trino&q=SELECT * FROM postgres.polygate.events
+  Naming: {catalog}.{schema}.{table}
+  Catalogs: postgres, clickhouse, elasticsearch, mongodb, questdb
+
 Response (200): {"ok": true, "result": {"columns": [...], "rows": [...], "engine": "..."}, "query_time_ms": 12}
+
+### GET /query?...&stream=true — SSE streaming
+Stream large result sets as Server-Sent Events (one page per event).
+
+Parameters:
+  stream=true — enable SSE
+  page_size=1000 — rows per event (default 1000, max 10000)
+  table=events — required for QuestDB (CSV schema lookup)
+
+All 6 engines support streaming:
+  PostgreSQL: server-side cursor (DECLARE/FETCH)
+  ClickHouse: JSONEachRow chunked streaming
+  Elasticsearch: Scroll API (scroll_id pagination)
+  MongoDB: cursor with BatchSize
+  QuestDB: /exp CSV streaming + schema type coercion
+  Trino: nextUri page following
+
+SSE format:
+  data: {"columns":[...],"rows":[...],"page":1,"done":false,"engine":"postgres"}
+  data: {"columns":[...],"rows":[...],"page":2,"done":true,"engine":"postgres"}
+  event: done
 
 ## Health
 
@@ -81,7 +107,7 @@ Response (503): one or more sinks unhealthy
 
 ### GET :9090/metrics — Prometheus metrics
 Key metrics: polygate_ingest_records_total, polygate_sink_write_duration_seconds,
-polygate_sink_errors_total, polygate_query_duration_seconds
+polygate_sink_errors_total, polygate_query_duration_seconds, polygate_batcher_queue_size
 `
 
 func textResource(uri, mimeType, text string) []mcp.ResourceContents {
