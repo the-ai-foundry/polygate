@@ -490,20 +490,35 @@ sinks:
     enabled: false      # disabled
 ```
 
-## Building
+## Make Commands
 
-```bash
-make build          # Build binary to bin/polygate
-make test           # Run unit tests
-make lint           # Run golangci-lint
-make docker-up      # Start all databases (full stack)
-make docker-down    # Stop databases
-make docker-clean   # Stop and remove volumes
-make run            # Build and run full stack
-make pg-mongo       # Build and run PG + MongoDB profile
-make mongo-es       # Build and run MongoDB + ES profile
-make pg-es          # Build and run PG + ES profile
-```
+### Build & Test
+
+| Command | Description |
+|---|---|
+| `make build` | Build binary to `bin/polygate` |
+| `make test` | Run unit tests |
+| `make lint` | Run golangci-lint |
+| `make clean` | Remove build artifacts |
+
+### Full Stack (all databases + Trino)
+
+| Command | Description |
+|---|---|
+| `make run` | Build + start all DBs + run polygate |
+| `make docker-up` | Start all databases |
+| `make docker-down` | Stop all databases |
+| `make docker-clean` | Stop + remove all data volumes |
+
+### Lightweight Profiles
+
+| Command | Databases | RAM |
+|---|---|---|
+| `make pg-mongo` | PostgreSQL + MongoDB | ~6 GB |
+| `make mongo-es` | MongoDB + Elasticsearch | ~6 GB |
+| `make pg-es` | PostgreSQL + Elasticsearch | ~8 GB |
+
+Each profile starts only the needed containers and uses a matching config file.
 
 ## Project Structure
 
