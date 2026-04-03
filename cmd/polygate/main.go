@@ -77,6 +77,12 @@ func main() {
 	// Setup query router.
 	router := query.NewRouter()
 
+	// Register Trino engine if enabled.
+	if cfg.Trino.Enabled && cfg.Trino.URL != "" {
+		router.Register(query.NewTrinoEngine(cfg.Trino.URL))
+		slog.Info("trino engine registered", "url", cfg.Trino.URL)
+	}
+
 	// Setup HTTP server.
 	srv := &server.Server{
 		Batcher:  bat,

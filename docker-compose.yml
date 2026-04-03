@@ -2,7 +2,7 @@ services:
   postgres:
     image: postgres:16
     ports:
-      - "5432:5432"
+      - "127.0.0.1:5432:5432"
     environment:
       POSTGRES_DB: polygate
       POSTGRES_USER: polygate
@@ -13,15 +13,15 @@ services:
   clickhouse:
     image: clickhouse/clickhouse-server:24
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "127.0.0.1:8123:8123"
+      - "127.0.0.1:9000:9000"
     volumes:
       - ch_data:/var/lib/clickhouse
 
   elasticsearch:
     image: elasticsearch:8.13.0
     ports:
-      - "9200:9200"
+      - "127.0.0.1:9200:9200"
     environment:
       discovery.type: single-node
       xpack.security.enabled: "false"
@@ -32,17 +32,37 @@ services:
   mongodb:
     image: mongo:7
     ports:
-      - "27017:27017"
+      - "127.0.0.1:27017:27017"
     volumes:
       - mongo_data:/data/db
 
   questdb:
     image: questdb/questdb:8.2.3
     ports:
-      - "9009:9009"   # ILP TCP
-      - "9003:9000"   # REST API (remapped to avoid conflict with CH)
+      - "127.0.0.1:9009:9009"   # ILP TCP
+      - "127.0.0.1:9003:9000"   # REST API (remapped to avoid conflict with CH)
     volumes:
       - quest_data:/var/lib/questdb
+
+  trino:
+    image: trinodb/trino:latest
+    ports:
+      - "127.0.0.1:8085:8080"   # Trino UI + API (remapped to avoid conflict with polygate)
+    volumes:
+      - ./trino/config.properties:/etc/trino/config.properties
+      - ./trino/jvm.config:/etc/trino/jvm.config
+      - ./trino/node.properties:/etc/trino/node.properties
+      - ./trino/log.properties:/etc/trino/log.properties
+      - ./trino/catalog:/etc/trino/catalog
+    depends_on:
+      - postgres
+      - clickhouse
+      - elasticsearch
+      - mongodb
+    deploy:
+      resources:
+        limits:
+          memory: 10G
 
 volumes:
   pg_data:

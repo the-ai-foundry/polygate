@@ -50,3 +50,9 @@ sinks:
     max_retries: 3
     retry_base_ms: 100
     timeout_secs: 30
+
+# Trino federated query engine (optional)
+# Enables cross-database JOINs: SELECT * FROM postgres.polygate.orders o JOIN clickhouse.default.metrics m ON ...
+trino:
+  enabled: true
+  url: "http://localhost:8085"

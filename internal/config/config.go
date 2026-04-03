@@ -13,6 +13,12 @@ type Config struct {
 	Metrics MetricsConfig         `yaml:"metrics"`
 	Batcher BatcherConfig         `yaml:"batcher"`
 	Sinks   map[string]SinkConfig `yaml:"sinks"`
+	Trino   TrinoConfig           `yaml:"trino"`
+}
+
+type TrinoConfig struct {
+	Enabled bool   `yaml:"enabled"`
+	URL     string `yaml:"url"`
 }
 
 type ServerConfig struct {
