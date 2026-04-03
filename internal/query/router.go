@@ -23,6 +23,18 @@ func (r *Router) Route(name string) (QueryEngine, error) {
 	return e, nil
 }
 
+func (r *Router) RouteStream(name string) (StreamEngine, error) {
+	e, ok := r.engines[name]
+	if !ok {
+		return nil, fmt.Errorf("unknown engine %q", name)
+	}
+	se, ok := e.(StreamEngine)
+	if !ok {
+		return nil, fmt.Errorf("engine %q does not support streaming", name)
+	}
+	return se, nil
+}
+
 func (r *Router) List() []string {
 	names := make([]string, 0, len(r.engines))
 	for n := range r.engines {
