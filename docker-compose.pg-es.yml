@@ -11,7 +11,7 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   elasticsearch:
-    image: elasticsearch:9
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
     ports:
       - "127.0.0.1:9200:9200"
     environment:

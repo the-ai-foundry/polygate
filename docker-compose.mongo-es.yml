@@ -7,7 +7,7 @@ services:
       - mongo_data:/data/db
 
   elasticsearch:
-    image: elasticsearch:9
+    image: docker.elastic.co/elasticsearch/elasticsearch:9.0.0
     ports:
       - "127.0.0.1:9200:9200"
     environment:
