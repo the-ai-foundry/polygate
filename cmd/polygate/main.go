@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/polygate/polygate/internal/batcher"
 	"github.com/polygate/polygate/internal/config"
+	polymcp "github.com/polygate/polygate/internal/mcp"
 	"github.com/polygate/polygate/internal/query"
 	"github.com/polygate/polygate/internal/schema"
 	"github.com/polygate/polygate/internal/server"
@@ -101,6 +103,29 @@ func main() {
 				slog.Error("metrics server error", "error", err)
 			}
 		}()
+	}
+
+	// Start MCP server if enabled.
+	if cfg.MCP.Enabled {
+		mcpServer := polymcp.New(registry, sinkSet, router, bat)
+		switch cfg.MCP.Transport {
+		case "http":
+			port := cfg.MCP.HTTPPort
+			if port == 0 {
+				port = 8090
+			}
+			go func() {
+				if err := mcpServer.RunHTTP(ctx, fmt.Sprintf("0.0.0.0:%d", port)); err != nil {
+					slog.Error("MCP HTTP server error", "error", err)
+				}
+			}()
+		default: // stdio
+			go func() {
+				if err := mcpServer.RunStdio(); err != nil {
+					slog.Error("MCP stdio server error", "error", err)
+				}
+			}()
+		}
 	}
 
 	// Start HTTP server (blocks until shutdown).

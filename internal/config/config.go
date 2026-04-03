@@ -14,11 +14,18 @@ type Config struct {
 	Batcher BatcherConfig         `yaml:"batcher"`
 	Sinks   map[string]SinkConfig `yaml:"sinks"`
 	Trino   TrinoConfig           `yaml:"trino"`
+	MCP     MCPConfig             `yaml:"mcp"`
 }
 
 type TrinoConfig struct {
 	Enabled bool   `yaml:"enabled"`
 	URL     string `yaml:"url"`
+}
+
+type MCPConfig struct {
+	Enabled   bool   `yaml:"enabled"`
+	Transport string `yaml:"transport"`  // "stdio" or "http"
+	HTTPPort  int    `yaml:"http_port"`  // only used when transport is "http"
 }
 
 type ServerConfig struct {

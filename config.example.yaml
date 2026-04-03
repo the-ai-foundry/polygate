@@ -51,6 +51,13 @@ sinks:
     retry_base_ms: 100
     timeout_secs: 30
 
+# MCP (Model Context Protocol) server
+# Exposes schemas, API docs, and tools for LLM integrations (Claude Code, Cursor, etc.)
+mcp:
+  enabled: false
+  transport: "stdio"     # "stdio" (local, for Claude Code) or "http" (remote)
+  http_port: 8090        # only used when transport is "http"
+
 # Trino federated query engine (optional)
 # Enables cross-database JOINs: SELECT * FROM postgres.polygate.orders o JOIN clickhouse.default.metrics m ON ...
 trino:

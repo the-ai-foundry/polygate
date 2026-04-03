@@ -5,6 +5,15 @@ import (
 	"sync"
 )
 
+// TableNotFoundError is returned when a table schema is not found.
+type TableNotFoundError struct {
+	Table string
+}
+
+func (e *TableNotFoundError) Error() string {
+	return fmt.Sprintf("schema not found for table: %s", e.Table)
+}
+
 // Index defines a secondary index on a set of columns.
 type Index struct {
 	Columns []string `json:"columns"`
