@@ -11,7 +11,7 @@ services:
       - pg_data:/var/lib/postgresql/data
 
   clickhouse:
-    image: clickhouse/clickhouse-server:24
+    image: clickhouse/clickhouse-server:25
     ports:
       - "127.0.0.1:8123:8123"
       - "127.0.0.1:9000:9000"
@@ -37,7 +37,7 @@ services:
       - mongo_data:/data/db
 
   questdb:
-    image: questdb/questdb:8.2.3
+    image: questdb/questdb:latest
     ports:
       - "127.0.0.1:9009:9009"   # ILP TCP
       - "127.0.0.1:9003:9000"   # REST API (remapped to avoid conflict with CH)
