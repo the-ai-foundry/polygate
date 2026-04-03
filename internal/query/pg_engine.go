@@ -18,14 +18,15 @@ func NewPGEngine(pool *pgxpool.Pool) *PGEngine {
 
 func (e *PGEngine) Name() string { return "postgres" }
 
-func (e *PGEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
+func (e *PGEngine) Execute(ctx context.Context, query string, opts *QueryOptions) (*Result, error) {
 	q := query
-	if page != nil {
-		if page.Limit > 0 {
-			q += fmt.Sprintf(" LIMIT %d", page.Limit)
+	if opts != nil {
+		q += SQLOrderBy(opts.Sort)
+		if opts.Limit > 0 {
+			q += fmt.Sprintf(" LIMIT %d", opts.Limit)
 		}
-		if page.Offset > 0 {
-			q += fmt.Sprintf(" OFFSET %d", page.Offset)
+		if opts.Offset > 0 {
+			q += fmt.Sprintf(" OFFSET %d", opts.Offset)
 		}
 	}
 
@@ -57,10 +58,10 @@ func (e *PGEngine) Execute(ctx context.Context, query string, page *PageOptions)
 	}
 
 	result := &Result{Columns: cols, Rows: resultRows, Engine: "postgres"}
-	if page != nil && page.Limit > 0 && len(resultRows) == page.Limit {
+	if opts != nil && opts.Limit > 0 && len(resultRows) == opts.Limit {
 		result.NextPage = &NextPage{
-			Offset: page.Offset + page.Limit,
-			Limit:  page.Limit,
+			Offset: opts.Offset + opts.Limit,
+			Limit:  opts.Limit,
 		}
 	}
 

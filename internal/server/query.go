@@ -36,26 +36,28 @@ func (s *Server) handleQuery(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Parse pagination params.
-	var page *query.PageOptions
+	// Parse query options (pagination + sorting).
+	var opts *query.QueryOptions
 	limitStr := r.URL.Query().Get("limit")
 	offsetStr := r.URL.Query().Get("offset")
-	if limitStr != "" || offsetStr != "" {
-		page = &query.PageOptions{}
+	sortStr := r.URL.Query().Get("sort")
+	if limitStr != "" || offsetStr != "" || sortStr != "" {
+		opts = &query.QueryOptions{}
 		if limitStr != "" {
 			if n, err := strconv.Atoi(limitStr); err == nil && n > 0 {
-				page.Limit = n
+				opts.Limit = n
 			}
 		}
 		if offsetStr != "" {
 			if n, err := strconv.Atoi(offsetStr); err == nil && n >= 0 {
-				page.Offset = n
+				opts.Offset = n
 			}
 		}
+		opts.Sort = query.ParseSort(sortStr)
 	}
 
 	start := time.Now()
-	result, err := engine.Execute(r.Context(), q, page)
+	result, err := engine.Execute(r.Context(), q, opts)
 	dur := time.Since(start)
 
 	metrics.QueryDuration.WithLabelValues(engineName).Observe(dur.Seconds())

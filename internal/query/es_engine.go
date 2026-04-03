@@ -27,8 +27,8 @@ func NewESEngine(url string) *ESEngine {
 
 func (e *ESEngine) Name() string { return "elasticsearch" }
 
-func (e *ESEngine) Execute(ctx context.Context, query string, page *PageOptions) (*Result, error) {
-	body := e.buildPagedQueryBody(query, page)
+func (e *ESEngine) Execute(ctx context.Context, query string, opts *QueryOptions) (*Result, error) {
+	body := e.buildQueryWithOptions(query, opts)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, e.url+"/_search", bytes.NewReader(body))
 	if err != nil {
@@ -55,10 +55,10 @@ func (e *ESEngine) Execute(ctx context.Context, query string, page *PageOptions)
 	rows, cols := extractHits(esResp.Hits.Hits)
 
 	result := &Result{Columns: cols, Rows: rows, Engine: "elasticsearch"}
-	if page != nil && page.Limit > 0 && len(rows) == page.Limit {
+	if opts != nil && opts.Limit > 0 && len(rows) == opts.Limit {
 		result.NextPage = &NextPage{
-			Offset: page.Offset + page.Limit,
-			Limit:  page.Limit,
+			Offset: opts.Offset + opts.Limit,
+			Limit:  opts.Limit,
 		}
 	}
 	return result, nil
@@ -205,14 +205,25 @@ func (e *ESEngine) buildQueryMap(query string) map[string]any {
 	}
 }
 
-func (e *ESEngine) buildPagedQueryBody(query string, page *PageOptions) []byte {
+func (e *ESEngine) buildQueryWithOptions(query string, opts *QueryOptions) []byte {
 	q := e.buildQueryMap(query)
-	if page != nil {
-		if page.Limit > 0 {
-			q["size"] = page.Limit
+	if opts != nil {
+		if opts.Limit > 0 {
+			q["size"] = opts.Limit
 		}
-		if page.Offset > 0 {
-			q["from"] = page.Offset
+		if opts.Offset > 0 {
+			q["from"] = opts.Offset
+		}
+		if len(opts.Sort) > 0 {
+			var sortFields []map[string]string
+			for _, f := range opts.Sort {
+				dir := "asc"
+				if f.Desc {
+					dir = "desc"
+				}
+				sortFields = append(sortFields, map[string]string{f.Column: dir})
+			}
+			q["sort"] = sortFields
 		}
 	}
 	body, _ := json.Marshal(q)

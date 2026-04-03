@@ -193,6 +193,28 @@ Response:
 }
 ```
 
+#### Sorting — `&sort=`
+
+Sort results by one or more columns:
+
+```bash
+# Sort by timestamp descending
+curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&sort=ts:desc"
+
+# Sort by multiple columns
+curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&sort=ts:desc,name:asc"
+```
+
+Format: `column:direction` (comma-separated). Direction is `asc` (default) or `desc`.
+
+How each engine sorts:
+
+| Engine | Mechanism |
+|---|---|
+| PostgreSQL, ClickHouse, QuestDB, Trino | `ORDER BY col ASC/DESC` appended to SQL |
+| Elasticsearch | `"sort": [{"col": "desc"}]` in query body |
+| MongoDB | `.Sort(bson.D{{"col", -1}})` on cursor |
+
 #### Pagination — `&limit=` and `&offset=`
 
 Paginate results instead of fetching everything at once:
@@ -203,6 +225,9 @@ curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&limit=100"
 
 # Next page
 curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&limit=100&offset=100"
+
+# Sort + paginate
+curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&sort=ts:desc&limit=100"
 ```
 
 When more results are available, the response includes `next_page`:

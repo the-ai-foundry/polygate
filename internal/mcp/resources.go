@@ -73,6 +73,15 @@ Trino cross-database:
 
 Response (200): {"ok": true, "result": {"columns": [...], "rows": [...], "engine": "..."}, "query_time_ms": 12}
 
+### Sorting: &sort=column:direction
+  /query?engine=postgres&q=SELECT * FROM events&sort=ts:desc
+  /query?engine=postgres&q=SELECT * FROM events&sort=ts:desc,name:asc
+
+### Pagination: &limit= and &offset=
+  /query?engine=postgres&q=SELECT * FROM events&limit=100&offset=200
+  Response includes next_page when more results available:
+  {"next_page": {"offset": 300, "limit": 100}}
+
 ### GET /query?...&stream=true — SSE streaming
 Stream large result sets as Server-Sent Events (one page per event).
 
