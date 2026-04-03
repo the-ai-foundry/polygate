@@ -7,7 +7,7 @@ services:
       - mongo_data:/data/db
 
   elasticsearch:
-    image: elasticsearch:8.13.0
+    image: elasticsearch:9
     ports:
       - "127.0.0.1:9200:9200"
     environment:
