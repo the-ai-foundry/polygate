@@ -193,6 +193,42 @@ Response:
 }
 ```
 
+#### Pagination — `&limit=` and `&offset=`
+
+Paginate results instead of fetching everything at once:
+
+```bash
+# First page (100 rows)
+curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&limit=100"
+
+# Next page
+curl "localhost:8080/query?engine=postgres&q=SELECT * FROM events&limit=100&offset=100"
+```
+
+When more results are available, the response includes `next_page`:
+```json
+{
+  "ok": true,
+  "result": {
+    "columns": ["id", "name"],
+    "rows": [{"id": 1, "name": "click"}, ...],
+    "engine": "postgres",
+    "next_page": {"offset": 100, "limit": 100}
+  },
+  "query_time_ms": 12
+}
+```
+
+When results are exhausted (fewer rows returned than limit), `next_page` is omitted.
+
+How each engine paginates:
+
+| Engine | Mechanism |
+|---|---|
+| PostgreSQL, ClickHouse, QuestDB, Trino | `LIMIT N OFFSET M` appended to SQL |
+| Elasticsearch | `size` and `from` in query body |
+| MongoDB | `Limit()` and `Skip()` on cursor |
+
 #### SSE Streaming — `GET /query?...&stream=true`
 
 Stream large result sets as Server-Sent Events. Each event contains a page of rows.
