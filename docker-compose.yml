@@ -41,6 +41,7 @@ services:
     ports:
       - "127.0.0.1:9009:9009"   # ILP TCP
       - "127.0.0.1:9003:9000"   # REST API (remapped to avoid conflict with CH)
+      - "127.0.0.1:8812:8812"   # PostgreSQL wire protocol (used by Trino)
     volumes:
       - quest_data:/var/lib/questdb
 
@@ -59,6 +60,7 @@ services:
       - clickhouse
       - elasticsearch
       - mongodb
+      - questdb
     deploy:
       resources:
         limits:
