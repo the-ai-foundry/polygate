@@ -410,16 +410,63 @@ curl -X POST "localhost:8080/ingest?table=metrics" \
   --data-binary @batch.bin
 ```
 
+## Deployment Profiles
+
+Don't need all 5 databases? Use a lightweight profile that only starts what you need:
+
+| Profile | Command | Databases | RAM Needed |
+|---|---|---|---|
+| **Full stack** | `make run` | PG + CH + ES + Mongo + QuestDB + Trino | ~32 GB |
+| **PG + MongoDB** | `make pg-mongo` | PostgreSQL + MongoDB | ~6 GB |
+| **MongoDB + ES** | `make mongo-es` | MongoDB + Elasticsearch | ~6 GB |
+| **PG + ES** | `make pg-es` | PostgreSQL + Elasticsearch | ~8 GB |
+
+Each profile includes a matching docker-compose and config file:
+
+```bash
+# Start PostgreSQL + MongoDB only
+make pg-mongo
+
+# Or manually:
+docker compose -f docker-compose.pg-mongo.yml up -d
+./bin/polygate -config config.pg-mongo.yaml
+```
+
+Only enabled sinks are initialized — disabled databases use zero memory and no connections. If a schema references a disabled sink, registration returns an error. If `sinks` is omitted from a schema, it defaults to whichever sinks are enabled.
+
+### Custom profiles
+
+Create your own by copying any config file and toggling `enabled`:
+
+```yaml
+sinks:
+  postgres:
+    enabled: true
+    dsn: "postgres://..."
+  clickhouse:
+    enabled: true
+    dsn: "http://..."
+  elasticsearch:
+    enabled: false      # disabled — skipped entirely
+  mongodb:
+    enabled: false      # disabled
+  questdb:
+    enabled: false      # disabled
+```
+
 ## Building
 
 ```bash
 make build          # Build binary to bin/polygate
 make test           # Run unit tests
 make lint           # Run golangci-lint
-make docker-up      # Start all databases
+make docker-up      # Start all databases (full stack)
 make docker-down    # Stop databases
 make docker-clean   # Stop and remove volumes
-make run            # Build and run with example config
+make run            # Build and run full stack
+make pg-mongo       # Build and run PG + MongoDB profile
+make mongo-es       # Build and run MongoDB + ES profile
+make pg-es          # Build and run PG + ES profile
 ```
 
 ## Project Structure
