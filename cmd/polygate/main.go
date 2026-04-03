@@ -157,7 +157,11 @@ func initSink(name string, sc config.SinkConfig) (sink.Sink, error) {
 	case "mongodb":
 		return sink.NewMongoDBSink(ctx, sc.DSN, sc.BulkSize, sc.MaxRetries, sc.RetryBaseMS)
 	case "questdb":
-		return sink.NewQuestDBSink(sc.DSN, sc.TimeoutSecs, sc.BulkSize, sc.MaxRetries, sc.RetryBaseMS), nil
+		restURL := sc.RESTURL
+		if restURL == "" {
+			restURL = "http://localhost:9000"
+		}
+		return sink.NewQuestDBSink(sc.DSN, restURL, sc.TimeoutSecs, sc.BulkSize, sc.MaxRetries, sc.RetryBaseMS), nil
 	default:
 		slog.Warn("unknown sink type, skipping", "sink", name)
 		return nil, nil

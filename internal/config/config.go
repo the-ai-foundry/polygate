@@ -46,6 +46,7 @@ type BatcherConfig struct {
 type SinkConfig struct {
 	Enabled     bool   `yaml:"enabled"`
 	DSN         string `yaml:"dsn"`
+	RESTURL     string `yaml:"rest_url"`     // QuestDB REST API URL for DDL (e.g. http://localhost:9000)
 	PasswordEnv string `yaml:"password_env"`
 	BulkSize    int    `yaml:"bulk_size"`
 	MaxRetries  int    `yaml:"max_retries"`

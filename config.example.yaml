@@ -45,7 +45,8 @@ sinks:
 
   questdb:
     enabled: true
-    dsn: "localhost:9009"
+    dsn: "localhost:9009"              # ILP TCP (ingestion)
+    rest_url: "http://localhost:9003"  # REST API (DDL + queries)
     bulk_size: 10000
     max_retries: 3
     retry_base_ms: 100

@@ -3,8 +3,12 @@ package sink
 import (
 	"context"
 	"fmt"
+	"io"
 	"log/slog"
 	"net"
+	"net/http"
+	"net/url"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -15,9 +19,11 @@ import (
 )
 
 type QuestDBSink struct {
-	addr       string
+	addr       string // ILP TCP address (e.g. localhost:9009)
+	restURL    string // REST API URL (e.g. http://localhost:9000)
 	conn       net.Conn
 	mu         sync.Mutex
+	httpClient *http.Client
 	bulkSize   int
 	maxRetries int
 	retryBase  int
@@ -25,9 +31,14 @@ type QuestDBSink struct {
 	tsCol      map[string]string // table → designated timestamp column
 }
 
-func NewQuestDBSink(addr string, timeoutSecs, bulkSize, maxRetries, retryBase int) *QuestDBSink {
+// NewQuestDBSink creates a QuestDB sink.
+// addr is the ILP TCP address (e.g. localhost:9009).
+// restURL is the QuestDB REST API URL (e.g. http://localhost:9000) for DDL.
+func NewQuestDBSink(addr, restURL string, timeoutSecs, bulkSize, maxRetries, retryBase int) *QuestDBSink {
 	return &QuestDBSink{
 		addr:       addr,
+		restURL:    strings.TrimRight(restURL, "/"),
+		httpClient: &http.Client{Timeout: time.Duration(timeoutSecs) * time.Second},
 		bulkSize:   bulkSize,
 		maxRetries: maxRetries,
 		retryBase:  retryBase,
@@ -39,14 +50,69 @@ func NewQuestDBSink(addr string, timeoutSecs, bulkSize, maxRetries, retryBase in
 func (s *QuestDBSink) Name() string { return "questdb" }
 
 func (s *QuestDBSink) CreateTable(ctx context.Context, ts *schema.TableSchema) error {
-	// QuestDB auto-creates tables from ILP data.
-	// Store the designated timestamp column for later use in ILP formatting.
 	if ts.DesignatedTimestamp != "" {
 		s.mu.Lock()
 		s.tsCol[ts.Table] = ts.DesignatedTimestamp
 		s.mu.Unlock()
 	}
-	slog.Debug("questdb table registered", "table", ts.Table, "designated_ts", ts.DesignatedTimestamp)
+
+	// Build CREATE TABLE DDL.
+	cols := make([]string, 0, len(ts.Columns))
+	for c := range ts.Columns {
+		cols = append(cols, c)
+	}
+	sort.Strings(cols)
+
+	var parts []string
+	for _, col := range cols {
+		nativeType := ts.ColumnTypeFor(col, "questdb")
+		parts = append(parts, fmt.Sprintf("  %s %s", col, nativeType))
+	}
+
+	ddl := fmt.Sprintf("CREATE TABLE IF NOT EXISTS %s (\n%s\n)", ts.Table, strings.Join(parts, ",\n"))
+
+	if ts.DesignatedTimestamp != "" {
+		ddl += fmt.Sprintf(" timestamp(%s)", ts.DesignatedTimestamp)
+	}
+
+	if err := s.execSQL(ctx, ddl); err != nil {
+		return fmt.Errorf("questdb create table %q: %w", ts.Table, err)
+	}
+	slog.Debug("questdb table created", "table", ts.Table)
+
+	// Create indexes on indexed columns.
+	// Symbol columns are auto-indexed by QuestDB, but we add explicit indexes
+	// for any columns listed in the schema's indexes.
+	for _, idx := range ts.Indexes {
+		for _, col := range idx.Columns {
+			indexSQL := fmt.Sprintf("ALTER TABLE %s ALTER COLUMN %s ADD INDEX", ts.Table, col)
+			if err := s.execSQL(ctx, indexSQL); err != nil {
+				// Index may already exist or column type may not support it — log and continue.
+				slog.Warn("questdb index creation failed (may already exist)", "table", ts.Table, "column", col, "error", err)
+			} else {
+				slog.Debug("questdb index created", "table", ts.Table, "column", col)
+			}
+		}
+	}
+
+	return nil
+}
+
+func (s *QuestDBSink) execSQL(ctx context.Context, sql string) error {
+	reqURL := fmt.Sprintf("%s/exec?query=%s", s.restURL, url.QueryEscape(sql))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+	if err != nil {
+		return err
+	}
+	resp, err := s.httpClient.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("questdb returned %d: %s", resp.StatusCode, string(body))
+	}
 	return nil
 }
 
