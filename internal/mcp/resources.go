@@ -84,7 +84,7 @@ Parameters:
 All 6 engines support streaming:
   PostgreSQL: server-side cursor (DECLARE/FETCH)
   ClickHouse: JSONEachRow chunked streaming
-  Elasticsearch: Scroll API (scroll_id pagination)
+  Elasticsearch: PIT (Point in Time) + search_after pagination
   MongoDB: cursor with BatchSize
   QuestDB: /exp CSV streaming + schema type coercion
   Trino: nextUri page following

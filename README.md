@@ -8,7 +8,7 @@ A multi-database data gateway that ingests data via REST API and fans out bulk w
 |---|---|---|---|
 | PostgreSQL | `COPY` protocol (pgx) | SQL | Server-side cursor (`DECLARE/FETCH`) |
 | ClickHouse | `INSERT FORMAT JSONEachRow` (HTTP) | SQL | Chunked `JSONEachRow` streaming |
-| Elasticsearch | `_bulk` API (NDJSON) | Query DSL / query_string | Scroll API (`scroll_id`) |
+| Elasticsearch | `_bulk` API (NDJSON) | Query DSL / query_string | PIT + `search_after` |
 | MongoDB | `insertMany(ordered: false)` | JSON filter | Cursor with `BatchSize` |
 | QuestDB | ILP over TCP (InfluxDB Line Protocol) | SQL via REST | `/exp` CSV streaming |
 | Trino | — (read-only federation) | SQL | `nextUri` page following |
@@ -258,7 +258,7 @@ Streaming mechanism per engine:
 |---|---|
 | PostgreSQL | Server-side cursor (`DECLARE cursor FOR ... ; FETCH N`) |
 | ClickHouse | `FORMAT JSONEachRow` — one JSON object per line |
-| Elasticsearch | Scroll API with `scroll_id` pagination |
+| Elasticsearch | PIT (Point in Time) + `search_after` pagination |
 | MongoDB | Cursor with `BatchSize` iteration |
 | QuestDB | `/exp` CSV endpoint + schema-based type coercion |
 | Trino | `nextUri` page following (native pagination) |
@@ -548,7 +548,7 @@ polygate/
       router.go                      # Engine routing by name
       pg_engine.go                   # PostgreSQL (cursor streaming)
       ch_engine.go                   # ClickHouse (JSONEachRow streaming)
-      es_engine.go                   # Elasticsearch (scroll streaming)
+      es_engine.go                   # Elasticsearch (PIT + search_after streaming)
       mongo_engine.go                # MongoDB (cursor streaming)
       quest_engine.go                # QuestDB (CSV streaming)
       trino_engine.go                # Trino (page streaming)
